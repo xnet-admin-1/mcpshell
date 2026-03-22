@@ -46,6 +46,8 @@ class MainActivity : AppCompatActivity() {
 
         setupBtn.setOnClickListener { setupUbuntu() }
 
+        findViewById<Button>(R.id.testBtn).setOnClickListener { runSelfTest() }
+
         appendLog("MCP Shell ready. Tap Start to begin.")
     }
 
@@ -95,6 +97,29 @@ class MainActivity : AppCompatActivity() {
                 }
                 updateShellStatus()
             }
+        }.start()
+    }
+
+    private fun runSelfTest() {
+        appendLog("─── Self Test ───")
+        Thread {
+            fun test(name: String, fn: () -> String) {
+                runOnUiThread { appendLog("[$name] running...") }
+                val result = try { fn() } catch (e: Exception) { "ERROR: ${e.message}" }
+                runOnUiThread { appendLog("[$name] $result") }
+            }
+            test("sh") { com.mcpshell.shell.ShellExecutor.exec("echo 'Hello from Android shell!'") }
+            if (com.mcpshell.shell.ProotBootstrap.isInstalled(this@MainActivity)) {
+                test("ubuntu") { com.mcpshell.shell.ProotExecutor.exec(this@MainActivity, "echo 'Hello from Ubuntu shell!'") }
+            } else {
+                runOnUiThread { appendLog("[ubuntu] skipped (not installed)") }
+            }
+            if (com.mcpshell.shell.RishExecutor.isShizukuReady()) {
+                test("rish") { com.mcpshell.shell.RishExecutor.exec("echo 'Hello from Shizuku!'") }
+            } else {
+                runOnUiThread { appendLog("[rish] skipped (Shizuku not available)") }
+            }
+            runOnUiThread { appendLog("─── Done ───") }
         }.start()
     }
 
