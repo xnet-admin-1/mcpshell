@@ -13,7 +13,7 @@
         android:textSize="24sp"
         android:textColor="#FFFFFF"
         android:textStyle="bold"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="4dp" />
 
     <TextView
         android:id="@+id/statusText"
@@ -22,14 +22,38 @@
         android:text="○ Stopped"
         android:textSize="16sp"
         android:textColor="#FF5722"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="4dp" />
 
-    <Button
-        android:id="@+id/toggleBtn"
+    <TextView
+        android:id="@+id/shellStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Shells: sh ✓"
+        android:textSize="13sp"
+        android:textColor="#888888"
+        android:layout_marginBottom="12dp" />
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Start Server"
-        android:layout_marginBottom="16dp" />
+        android:orientation="horizontal"
+        android:layout_marginBottom="12dp">
+
+        <Button
+            android:id="@+id/toggleBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Start Server"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/setupBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Setup Ubuntu" />
+    </LinearLayout>
 
     <TextView
         android:layout_width="wrap_content"
