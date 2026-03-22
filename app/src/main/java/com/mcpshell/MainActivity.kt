@@ -48,6 +48,15 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.testBtn).setOnClickListener { runSelfTest() }
 
+        findViewById<android.widget.TextView>(R.id.copyLogsBtn).setOnClickListener {
+            val clip = getSystemService(android.content.ClipboardManager::class.java)
+            clip.setPrimaryClip(android.content.ClipData.newPlainText("MCP Shell Log", logText.text))
+            android.widget.Toast.makeText(this, "Copied", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        findViewById<android.widget.TextView>(R.id.clearLogsBtn).setOnClickListener {
+            logText.text = ""
+        }
+
         appendLog("MCP Shell ready. Tap Start to begin.")
     }
 
