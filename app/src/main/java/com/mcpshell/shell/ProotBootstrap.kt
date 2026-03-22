@@ -4,9 +4,11 @@ import android.content.Context
 import android.util.Log
 import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.zip.GZIPInputStream
 
 /**
  * Downloads and configures the proot Ubuntu rootfs.
@@ -64,12 +66,7 @@ object ProotBootstrap {
                 download(url, tarball, log)
 
                 log("Extracting rootfs...")
-                val p = Runtime.getRuntime().exec(arrayOf("tar", "xzf", tarball.absolutePath, "-C", rootfs.absolutePath))
-                p.waitFor()
-                if (p.exitValue() != 0) {
-                    log("ERROR: tar extraction failed (exit ${p.exitValue()})")
-                    return false
-                }
+                extractTarGz(tarball, rootfs, log)
                 tarball.delete()
                 marker(ctx).writeText("installed")
                 log("Rootfs extracted")
@@ -86,6 +83,83 @@ object ProotBootstrap {
             log("ERROR: ${e.message}")
             Log.e(TAG, "setup failed", e)
             return false
+        }
+    }
+
+    private fun extractTarGz(tarGz: File, destDir: File, log: (String) -> Unit) {
+        var count = 0
+        GZIPInputStream(FileInputStream(tarGz)).use { gzip ->
+            val buf = ByteArray(512)
+            while (true) {
+                val headerRead = readFully(gzip, buf)
+                if (headerRead < 512 || buf.all { it == 0.toByte() }) break
+
+                val name = String(buf, 0, 100).trim('\u0000').trim()
+                if (name.isEmpty()) break
+                val sizeStr = String(buf, 124, 12).trim('\u0000').trim()
+                val size = sizeStr.toLongOrNull(8) ?: 0L
+                val typeFlag = buf[156]
+
+                val outFile = File(destDir, name)
+
+                when (typeFlag.toInt().toChar()) {
+                    '5', 'D' -> outFile.mkdirs()
+                    '2' -> {
+                        // Symlink
+                        val linkTarget = String(buf, 157, 100).trim('\u0000').trim()
+                        try {
+                            outFile.parentFile?.mkdirs()
+                            if (outFile.exists()) outFile.delete()
+                            Runtime.getRuntime().exec(arrayOf("ln", "-sf", linkTarget, outFile.absolutePath)).waitFor()
+                        } catch (_: Exception) {}
+                        skipBytes(gzip, size)
+                    }
+                    else -> {
+                        outFile.parentFile?.mkdirs()
+                        FileOutputStream(outFile).use { out ->
+                            var remaining = size
+                            val dataBuf = ByteArray(65536)
+                            while (remaining > 0) {
+                                val toRead = minOf(remaining, dataBuf.size.toLong()).toInt()
+                                val n = gzip.read(dataBuf, 0, toRead)
+                                if (n <= 0) break
+                                out.write(dataBuf, 0, n)
+                                remaining -= n
+                            }
+                        }
+                        // Set executable for bin/sbin files
+                        if (name.contains("/bin/") || name.contains("/sbin/")) {
+                            outFile.setExecutable(true)
+                        }
+                        // Skip padding to 512-byte boundary
+                        val pad = (512 - (size % 512)) % 512
+                        skipBytes(gzip, pad)
+                    }
+                }
+                count++
+                if (count % 500 == 0) log("  Extracted $count files...")
+            }
+        }
+        log("  Extracted $count files")
+    }
+
+    private fun readFully(input: java.io.InputStream, buf: ByteArray): Int {
+        var off = 0
+        while (off < buf.size) {
+            val n = input.read(buf, off, buf.size - off)
+            if (n <= 0) return off
+            off += n
+        }
+        return off
+    }
+
+    private fun skipBytes(input: java.io.InputStream, count: Long) {
+        var remaining = count
+        val skip = ByteArray(4096)
+        while (remaining > 0) {
+            val n = input.read(skip, 0, minOf(remaining, skip.size.toLong()).toInt())
+            if (n <= 0) break
+            remaining -= n
         }
     }
 
