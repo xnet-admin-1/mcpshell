@@ -72,15 +72,18 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
             val method = parts.getOrNull(0) ?: ""
             val path = parts.getOrNull(1) ?: ""
 
+            val uri = path.substringBefore("?")
+            val query = path.substringAfter("?", "")
+
             Log.d(TAG, "$method $path")
 
             when {
-                method == "GET" && path == "/sse" -> handleSse(output, socket)
-                method == "POST" && path.startsWith("/message") -> {
-                    handleMessage(path, input, headers, output)
+                method == "GET" && uri == "/sse" -> handleSse(output, socket)
+                method == "POST" && uri == "/message" -> {
+                    handleMessage(query, input, headers, output)
                     socket.close()
                 }
-                method == "GET" && path == "/health" -> {
+                method == "GET" && uri == "/health" -> {
                     sendHttp(output, 200, "application/json", """{"status":"ok"}""")
                     socket.close()
                 }
@@ -138,9 +141,12 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
         }
     }
 
-    private fun handleMessage(path: String, input: BufferedReader, headers: Map<String, String>, output: OutputStream) {
-        // Parse sessionId from query string
-        val sessionId = path.substringAfter("sessionId=", "").substringBefore("&")
+    private fun handleMessage(query: String, input: BufferedReader, headers: Map<String, String>, output: OutputStream) {
+        val params = query.split("&").associate {
+            val (k, v) = it.split("=", limit = 2).let { p -> p[0] to p.getOrElse(1) { "" } }
+            k to v
+        }
+        val sessionId = params["sessionId"] ?: ""
         if (sessionId.isEmpty()) {
             sendHttp(output, 400, "text/plain", "Missing sessionId")
             return
