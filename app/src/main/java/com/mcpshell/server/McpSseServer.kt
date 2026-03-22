@@ -2,11 +2,11 @@ package com.mcpshell.server
 
 import android.util.Log
 import com.mcpshell.tools.ToolRegistry
-import fi.iki.elonen.NanoHTTPD
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
-import java.io.InputStream
+import java.io.*
+import java.net.ServerSocket
+import java.net.Socket
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
@@ -15,115 +15,156 @@ import java.util.concurrent.TimeUnit
 private const val TAG = "McpSseServer"
 
 /**
- * MCP server using SSE transport over NanoHTTPD.
- *
- * Protocol:
- *   1. Client GET /sse → SSE stream, receives endpoint event
- *   2. Client POST /message?sessionId=xxx → JSON-RPC request
- *   3. Server pushes response via SSE stream
+ * MCP SSE server using raw ServerSocket.
+ * NanoHTTPD's chunked encoding breaks SSE streams, so we handle HTTP manually.
  */
-class McpSseServer(
-    port: Int,
-    private val log: (String) -> Unit = {}
-) : NanoHTTPD(port) {
+class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}) {
 
     companion object {
         var instance: McpSseServer? = null
     }
 
     private val toolRegistry = ToolRegistry()
+    private val sessions = ConcurrentHashMap<String, LinkedBlockingQueue<String>>()
+    private var serverSocket: ServerSocket? = null
+    @Volatile var isAlive = false; private set
 
-    // Each SSE session has a queue of bytes to send
-    private val sessions = ConcurrentHashMap<String, LinkedBlockingQueue<ByteArray>>()
-
-    override fun serve(session: IHTTPSession): Response {
-        Log.d(TAG, "${session.method} ${session.uri}")
-        return when {
-            session.method == Method.GET && session.uri == "/sse" -> handleSse(session)
-            session.method == Method.POST && session.uri == "/message" -> handleMessage(session)
-            session.method == Method.GET && session.uri == "/health" ->
-                newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
-            else -> {
-                log("404: ${session.method} ${session.uri}")
-                newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found: ${session.uri}")
+    fun start() {
+        isAlive = true
+        Thread {
+            try {
+                serverSocket = ServerSocket(port)
+                Log.i(TAG, "Listening on port $port")
+                while (isAlive) {
+                    val socket = serverSocket?.accept() ?: break
+                    Thread { handleClient(socket) }.start()
+                }
+            } catch (e: Exception) {
+                if (isAlive) Log.e(TAG, "Server error: ${e.message}")
             }
+        }.start()
+    }
+
+    fun stop() {
+        isAlive = false
+        sessions.clear()
+        try { serverSocket?.close() } catch (_: Exception) {}
+        serverSocket = null
+    }
+
+    private fun handleClient(socket: Socket) {
+        try {
+            socket.soTimeout = 0 // no read timeout for SSE
+            val input = BufferedReader(InputStreamReader(socket.getInputStream()))
+            val output = socket.getOutputStream()
+
+            // Read HTTP request line + headers
+            val requestLine = input.readLine() ?: return
+            val headers = mutableMapOf<String, String>()
+            while (true) {
+                val line = input.readLine() ?: break
+                if (line.isEmpty()) break
+                val idx = line.indexOf(':')
+                if (idx > 0) headers[line.substring(0, idx).trim().lowercase()] = line.substring(idx + 1).trim()
+            }
+
+            val parts = requestLine.split(" ")
+            val method = parts.getOrNull(0) ?: ""
+            val path = parts.getOrNull(1) ?: ""
+
+            Log.d(TAG, "$method $path")
+
+            when {
+                method == "GET" && path == "/sse" -> handleSse(output, socket)
+                method == "POST" && path.startsWith("/message") -> {
+                    handleMessage(path, input, headers, output)
+                    socket.close()
+                }
+                method == "GET" && path == "/health" -> {
+                    sendHttp(output, 200, "application/json", """{"status":"ok"}""")
+                    socket.close()
+                }
+                else -> {
+                    log("404: $method $path")
+                    sendHttp(output, 404, "text/plain", "Not found: $path")
+                    socket.close()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Client error: ${e.message}")
+            try { socket.close() } catch (_: Exception) {}
         }
     }
 
-    private fun handleSse(session: IHTTPSession): Response {
+    private fun handleSse(output: OutputStream, socket: Socket) {
         val sessionId = UUID.randomUUID().toString()
-        val queue = LinkedBlockingQueue<ByteArray>()
+        val queue = LinkedBlockingQueue<String>()
         sessions[sessionId] = queue
 
         log("Client connected: $sessionId")
 
-        // Send endpoint event immediately via the queue
-        val port = this.listeningPort
+        // Send HTTP headers for SSE
+        val header = "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: text/event-stream\r\n" +
+            "Cache-Control: no-cache\r\n" +
+            "Connection: keep-alive\r\n" +
+            "Access-Control-Allow-Origin: *\r\n" +
+            "\r\n"
+        output.write(header.toByteArray())
+        output.flush()
+
+        // Send endpoint event
         val endpointUrl = "http://localhost:$port/message?sessionId=$sessionId"
-        queue.put("event: endpoint\ndata: $endpointUrl\n\n".toByteArray())
+        writeSseEvent(output, "endpoint", endpointUrl)
 
-        // Create an InputStream that reads from the queue — blocks until data available
-        val sseStream = object : InputStream() {
-            private var current: ByteArrayInputStream? = null
-
-            override fun read(): Int {
-                while (true) {
-                    val c = current
-                    if (c != null) {
-                        val b = c.read()
-                        if (b != -1) return b
-                        current = null
-                    }
-                    // Block waiting for next chunk (with keepalive)
-                    val data = queue.poll(15, TimeUnit.SECONDS)
-                    if (data == null) {
-                        // Send SSE comment as keepalive
-                        current = ByteArrayInputStream(":keepalive\n\n".toByteArray())
-                    } else {
-                        current = ByteArrayInputStream(data)
-                    }
+        // Keep connection open, send events from queue
+        try {
+            while (isAlive && !socket.isClosed) {
+                val data = queue.poll(15, TimeUnit.SECONDS)
+                if (data != null) {
+                    writeSseEvent(output, "message", data)
+                } else {
+                    // Keepalive
+                    output.write(":keepalive\n\n".toByteArray())
+                    output.flush()
                 }
             }
-
-            override fun read(b: ByteArray, off: Int, len: Int): Int {
-                // First byte blocks, then read what's available
-                val first = read()
-                if (first == -1) return -1
-                b[off] = first.toByte()
-                var count = 1
-                while (count < len) {
-                    val c = current
-                    if (c != null && c.available() > 0) {
-                        val n = c.read(b, off + count, minOf(len - count, c.available()))
-                        if (n > 0) count += n
-                        else break
-                    } else break
-                }
-                return count
-            }
-
-            override fun available(): Int = current?.available() ?: 0
+        } catch (e: Exception) {
+            Log.d(TAG, "SSE stream ended: ${e.message}")
+        } finally {
+            sessions.remove(sessionId)
+            log("Client disconnected: $sessionId")
+            try { socket.close() } catch (_: Exception) {}
         }
-
-        val response = newChunkedResponse(Response.Status.OK, "text/event-stream", sseStream)
-        response.addHeader("Cache-Control", "no-cache")
-        response.addHeader("Connection", "keep-alive")
-        response.addHeader("Access-Control-Allow-Origin", "*")
-        return response
     }
 
-    private fun handleMessage(session: IHTTPSession): Response {
-        val sessionId = session.parms["sessionId"]
-            ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing sessionId")
+    private fun handleMessage(path: String, input: BufferedReader, headers: Map<String, String>, output: OutputStream) {
+        // Parse sessionId from query string
+        val sessionId = path.substringAfter("sessionId=", "").substringBefore("&")
+        if (sessionId.isEmpty()) {
+            sendHttp(output, 400, "text/plain", "Missing sessionId")
+            return
+        }
         val queue = sessions[sessionId]
-            ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Unknown session")
+        if (queue == null) {
+            sendHttp(output, 400, "text/plain", "Unknown session")
+            return
+        }
 
-        val bodyMap = HashMap<String, String>()
-        session.parseBody(bodyMap)
-        val body = bodyMap["postData"] ?: ""
+        // Read POST body
+        val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+        val bodyChars = CharArray(contentLength)
+        var read = 0
+        while (read < contentLength) {
+            val n = input.read(bodyChars, read, contentLength - read)
+            if (n <= 0) break
+            read += n
+        }
+        val body = String(bodyChars, 0, read)
 
         val request = try { JSONObject(body) } catch (e: Exception) {
-            return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Invalid JSON")
+            sendHttp(output, 400, "text/plain", "Invalid JSON")
+            return
         }
 
         Log.d(TAG, "← $body")
@@ -134,10 +175,32 @@ class McpSseServer(
         if (result != null) {
             val data = result.toString()
             Log.d(TAG, "→ $data")
-            queue.put("event: message\ndata: $data\n\n".toByteArray())
+            queue.put(data)
         }
 
-        return newFixedLengthResponse(Response.Status.ACCEPTED, "application/json", """{"ok":true}""")
+        sendHttp(output, 202, "application/json", """{"ok":true}""")
+    }
+
+    private fun writeSseEvent(output: OutputStream, event: String, data: String) {
+        output.write("event: $event\ndata: $data\n\n".toByteArray())
+        output.flush()
+    }
+
+    private fun sendHttp(output: OutputStream, code: Int, contentType: String, body: String) {
+        val status = when (code) {
+            200 -> "OK"; 202 -> "Accepted"; 400 -> "Bad Request"; 404 -> "Not Found"
+            else -> "OK"
+        }
+        val bytes = body.toByteArray()
+        val resp = "HTTP/1.1 $code $status\r\n" +
+            "Content-Type: $contentType\r\n" +
+            "Content-Length: ${bytes.size}\r\n" +
+            "Access-Control-Allow-Origin: *\r\n" +
+            "Connection: close\r\n" +
+            "\r\n"
+        output.write(resp.toByteArray())
+        output.write(bytes)
+        output.flush()
     }
 
     private fun processRequest(request: JSONObject): JSONObject? {
@@ -182,10 +245,5 @@ class McpSseServer(
 
     private fun jsonRpcResult(id: Any?, result: JSONObject) = JSONObject().apply {
         put("jsonrpc", "2.0"); put("id", id); put("result", result)
-    }
-
-    override fun stop() {
-        sessions.clear()
-        super.stop()
     }
 }

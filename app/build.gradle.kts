@@ -39,8 +39,6 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    // NanoHTTPD for the MCP SSE server
-    implementation("org.nanohttpd:nanohttpd:2.3.1")
     // Shizuku for rish
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
