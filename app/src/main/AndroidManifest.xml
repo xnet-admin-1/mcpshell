@@ -13,7 +13,6 @@
     <application
         android:name=".McpShellApp"
         android:label="MCP Shell"
-        android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.McpShell"
         android:exported="true">
 
