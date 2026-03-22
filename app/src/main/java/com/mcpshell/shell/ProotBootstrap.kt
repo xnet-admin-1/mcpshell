@@ -57,7 +57,7 @@ object ProotBootstrap {
                     "x86_64" in arch -> "amd64"
                     else -> "arm64"
                 }
-                val url = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.2-base-$ubuntuArch.tar.gz"
+                val url = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-$ubuntuArch.tar.gz"
                 val tarball = File(envDir, "rootfs.tar.gz")
 
                 log("Downloading Ubuntu 24.04 rootfs ($ubuntuArch)...")
@@ -90,9 +90,29 @@ object ProotBootstrap {
     }
 
     private fun download(urlStr: String, dest: File, log: (String) -> Unit) {
-        val conn = URL(urlStr).openConnection() as HttpURLConnection
-        conn.connectTimeout = 30_000; conn.readTimeout = 30_000
-        conn.instanceFollowRedirects = true
+        var url = URL(urlStr)
+        var redirects = 0
+        var conn: HttpURLConnection
+        // Manual redirect loop (HttpURLConnection doesn't follow https→https redirects reliably)
+        while (true) {
+            conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 30_000; conn.readTimeout = 60_000
+            conn.instanceFollowRedirects = false
+            val code = conn.responseCode
+            if (code in 301..308) {
+                val loc = conn.getHeaderField("Location") ?: break
+                url = URL(url, loc)
+                conn.disconnect()
+                if (++redirects > 5) { log("ERROR: too many redirects"); return }
+                continue
+            }
+            if (code != 200) {
+                log("ERROR: HTTP $code from $url")
+                conn.disconnect()
+                return
+            }
+            break
+        }
         val total = conn.contentLength.toLong()
         var downloaded = 0L
         BufferedInputStream(conn.inputStream).use { input ->
