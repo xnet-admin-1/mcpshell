@@ -15,6 +15,10 @@ android {
         versionName = "0.1.0"
     }
 
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+
     buildTypes {
         debug { isDebuggable = true }
         release {

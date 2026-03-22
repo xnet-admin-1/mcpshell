@@ -13,6 +13,7 @@
     <application
         android:name=".McpShellApp"
         android:label="MCP Shell"
+        android:extractNativeLibs="true"
         android:theme="@style/Theme.McpShell"
         android:exported="true">
 
