@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
         statusText.text = "● Running on localhost:$port"
         statusText.setTextColor(0xFF4CAF50.toInt())
         toggleBtn.text = "Stop Server"
-        appendLog("MCP SSE server started on http://localhost:$port/sse")
+        appendLog("MCP Streamable HTTP server started on http://localhost:$port/mcp")
     }
 
     private fun stopServer() {
