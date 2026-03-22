@@ -49,7 +49,7 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
 
     private fun handleClient(socket: Socket) {
         try {
-            socket.soTimeout = 30_000
+            socket.soTimeout = 120_000
             val input = BufferedReader(InputStreamReader(socket.getInputStream()))
             val output = socket.getOutputStream()
 

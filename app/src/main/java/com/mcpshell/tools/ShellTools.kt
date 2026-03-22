@@ -42,7 +42,7 @@ class ShellTools {
 
     fun runUbuntu(args: JSONObject): String {
         val cmd = args.getString("command")
-        val timeout = args.optLong("timeout", 30)
+        val timeout = args.optLong("timeout", 60)
         Log.d(TAG, "run_ubuntu: $cmd")
         val ctx = McpShellApp.instance
         return ProotExecutor.exec(ctx, cmd, timeout * 1000)

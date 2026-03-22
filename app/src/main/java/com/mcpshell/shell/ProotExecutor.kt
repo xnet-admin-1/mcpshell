@@ -6,7 +6,7 @@ import java.io.File
 
 /**
  * Executes commands inside a proot Ubuntu/Debian environment.
- * Ported from AIOPE's aiope_cli.py proot logic into pure Kotlin.
+ * Ported from AIOPE's proot logic into pure Kotlin.
  */
 object ProotExecutor {
 
@@ -14,18 +14,28 @@ object ProotExecutor {
 
     fun exec(context: Context, command: String, timeoutMs: Long = 30_000): String {
         val filesDir = context.filesDir.absolutePath
-        val envDir = File(filesDir, "env")
-        val rootfs = File(envDir, "ubuntu")
+        val rootfs = File(filesDir, "env/ubuntu")
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
 
-        val prootBin = File(nativeLibDir, "libproot.so")
+        // libproot-xed.so is the actual proot binary; libproot.so is the loader
+        val prootBin = File(nativeLibDir, "libproot-xed.so")
         if (!prootBin.exists()) return "Error: proot binary not found at ${prootBin.path}"
-        if (!rootfs.isDirectory) return "Error: Ubuntu rootfs not installed at ${rootfs.path}. Run setup first."
+        if (!rootfs.isDirectory) return "Error: Ubuntu rootfs not installed. Run setup first."
+
+        // Ensure libtalloc.so.2 exists
+        val talloc = File(filesDir, "libtalloc.so.2")
+        if (!talloc.exists()) {
+            val src = File(nativeLibDir, "libtalloc.so")
+            if (src.exists()) src.inputStream().use { i -> talloc.outputStream().use { o -> i.copyTo(o) } }
+        }
+
+        // Ensure tmp dir
+        File(filesDir, "tmp").mkdirs()
 
         val args = buildProotArgs(rootfs, filesDir, command)
         val env = buildProotEnv(filesDir, nativeLibDir)
 
-        Log.d(TAG, "proot ${args.joinToString(" ")}")
+        Log.d(TAG, "exec: ${prootBin.name} ${args.take(5).joinToString(" ")}...")
 
         return try {
             val pb = ProcessBuilder(listOf(prootBin.absolutePath) + args)
@@ -40,6 +50,7 @@ object ProotExecutor {
             if (out.length > 8000) out.take(8000) + "\n[truncated]"
             else out.ifEmpty { "(no output, exit ${process.exitValue()})" }
         } catch (e: Exception) {
+            Log.e(TAG, "exec failed", e)
             "Error: ${e.message}"
         }
     }
@@ -48,16 +59,15 @@ object ProotExecutor {
         val args = mutableListOf("--kill-on-exit")
 
         fun bind(src: String, dst: String? = null) {
-            val spec = if (dst != null) "$src:$dst" else src
-            args.addAll(listOf("-b", spec))
+            args.addAll(listOf("-b", if (dst != null) "$src:$dst" else src))
         }
 
         // System directories
         for (mnt in listOf("/apex", "/odm", "/product", "/system", "/system_ext", "/vendor",
                            "/linkerconfig/ld.config.txt",
                            "/linkerconfig/com.android.art/ld.config.txt")) {
-            val real = File(mnt).let { if (it.exists()) it.canonicalPath else null }
-            if (real != null && File(real).exists()) bind(real)
+            val f = File(mnt)
+            if (f.exists()) bind(f.canonicalPath)
         }
 
         bind("/dev")
@@ -67,16 +77,13 @@ object ProotExecutor {
         bind("/proc/self/fd", "/dev/fd")
         bind(filesDir)
 
-        // /dev/shm
         val tmpDir = File(rootfs, "tmp").also { it.mkdirs() }
         bind(tmpDir.absolutePath, "/dev/shm")
 
-        // /dev/stdin/stdout/stderr
         if (File("/proc/self/fd/0").exists()) bind("/proc/self/fd/0", "/dev/stdin")
         if (File("/proc/self/fd/1").exists()) bind("/proc/self/fd/1", "/dev/stdout")
         if (File("/proc/self/fd/2").exists()) bind("/proc/self/fd/2", "/dev/stderr")
 
-        // Fake fips_enabled
         val fipsFile = File(tmpDir, "fips_enabled").also { it.writeText("0\n") }
         bind(fipsFile.absolutePath, "/proc/sys/crypto/fips_enabled")
 
