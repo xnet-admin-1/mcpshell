@@ -220,19 +220,82 @@ object ProotBootstrap {
         File(rootfs, "etc/resolv.conf").writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
 
         // Standard dirs
-        for (d in listOf("tmp", "var/tmp", "var/cache/apt", "var/lib/apt", "home", "root")) {
+        for (d in listOf("tmp", "var/tmp", "var/cache/apt", "var/lib/apt", "home", "root",
+                         "root/.config/pip", "root/.config/procps")) {
             File(rootfs, d).mkdirs()
         }
         File(rootfs, "tmp").setWritable(true, false)
 
-        // Bashrc
-        File(rootfs, "root/.bashrc").writeText(
-            "export TERM=xterm-256color\nexport LANG=C.UTF-8\nexport LC_ALL=C.UTF-8\n" +
-            "export PS1=\"\\[\\033[01;32m\\]\\u@mcpshell\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ \"\n" +
-            "alias ls='ls --color=auto'\nalias ll='ls -lh'\n"
-        )
+        // --- Agent-optimized defaults ---
 
-        // Proot stubs (ldconfig, invoke-rc.d, start-stop-daemon)
+        // apt: silent, no recommends, no periodic updates
+        File(rootfs, "etc/apt/apt.conf.d").mkdirs()
+        File(rootfs, "etc/apt/apt.conf.d/99-agent-optimizations").writeText("""
+APT::Get::Assume-Yes "true";
+APT::Get::Show-Upgraded "false";
+APT::Install-Recommends "false";
+APT::Install-Suggests "false";
+APT::Quiet "2";
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Unattended-Upgrade "0";
+Acquire::Retries "3";
+Acquire::https::Timeout "30";
+Acquire::http::Timeout "30";
+""".trimIndent() + "\n")
+
+        // dpkg: force-unsafe-io, no prompts, remove PaxHeaders
+        File(rootfs, "etc/dpkg/dpkg.cfg.d").mkdirs()
+        File(rootfs, "etc/dpkg/dpkg.cfg.d/PaxHeaders").let { if (it.exists()) it.deleteRecursively() }
+        File(rootfs, "etc/dpkg/dpkg.cfg.d/99-agent-optimizations").writeText(
+            "force-unsafe-io\nforce-confdef\nforce-confold\nno-debsig\n")
+
+        // bashrc: minimal prompt, aliases, no history
+        File(rootfs, "root/.bashrc").writeText("""
+export TERM=xterm-256color
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export DEBIAN_FRONTEND=noninteractive
+export PS1='\u@mcpshell:\w\$ '
+export HISTSIZE=0
+export HISTFILESIZE=0
+alias ls='ls --color=auto'
+alias ll='ls -lah'
+alias apt='apt -qq'
+""".trimIndent() + "\n")
+
+        // profile: PATH, locale, noninteractive
+        File(rootfs, "root/.profile").writeText("""
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export DEBIAN_FRONTEND=noninteractive
+""".trimIndent() + "\n")
+
+        // inputrc: completion, no bell
+        File(rootfs, "root/.inputrc").writeText(
+            "set editing-mode emacs\nset bell-style none\nset completion-ignore-case on\nTAB: complete\n")
+
+        // wget: quiet, timeout
+        File(rootfs, "root/.wgetrc").writeText("quiet=on\ntimeout=30\ntries=3\n")
+
+        // curl: silent, timeout
+        File(rootfs, "root/.curlrc").writeText("--silent\n--fail\n--connect-timeout 30\n--max-time 120\n--retry 3\n")
+
+        // git: no pager, no ssl verify
+        File(rootfs, "root/.gitconfig").writeText(
+            "[core]\n\tpager = cat\n[http]\n\tsslVerify = false\n[advice]\n\tdetachedHead = false\n")
+
+        // pip: no cache, quiet
+        File(rootfs, "root/.config/pip/pip.conf").writeText(
+            "[global]\nno-cache-dir = true\nquiet = 1\nprogress-bar = off\n")
+
+        // npm: no progress
+        File(rootfs, "root/.npmrc").writeText("progress=false\nloglevel=error\n")
+
+        // nano: auto-indent, line numbers
+        File(rootfs, "root/.nanorc").writeText("set autoindent\nset linenumbers\nset nobackup\n")
+
+        // --- Proot stubs ---
         val stub = "#!/bin/sh\nexit 0\n"
         for (rel in listOf("sbin/ldconfig", "usr/sbin/ldconfig", "usr/sbin/invoke-rc.d",
                            "sbin/start-stop-daemon", "usr/sbin/start-stop-daemon")) {
@@ -243,11 +306,6 @@ object ProotBootstrap {
                 f.writeText(stub); f.setExecutable(true)
             }
         }
-
-        // dpkg force-unsafe-io + remove PaxHeaders
-        File(rootfs, "etc/dpkg/dpkg.cfg.d").mkdirs()
-        File(rootfs, "etc/dpkg/dpkg.cfg.d/PaxHeaders").let { if (it.exists()) it.deleteRecursively() }
-        File(rootfs, "etc/dpkg/dpkg.cfg.d/00proot").writeText("force-unsafe-io\n")
 
         // Android GIDs
         val groupFile = File(rootfs, "etc/group")
@@ -260,6 +318,6 @@ object ProotBootstrap {
             if (extras.isNotEmpty()) groupFile.appendText(extras.joinToString("\n", postfix = "\n"))
         }
 
-        log("Rootfs patched (DNS, stubs, dpkg, GIDs)")
+        log("Rootfs patched (DNS, stubs, dpkg, agent defaults, GIDs)")
     }
 }
