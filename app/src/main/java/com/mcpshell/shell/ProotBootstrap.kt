@@ -100,6 +100,14 @@ object ProotBootstrap {
                 val size = sizeStr.toLongOrNull(8) ?: 0L
                 val typeFlag = buf[156]
 
+                // Skip PaxHeaders entries (cause dpkg errors)
+                if (typeFlag.toInt().toChar() == 'x' || typeFlag.toInt().toChar() == 'g'
+                    || name.contains("PaxHeaders")) {
+                    val pad = (512 - (size % 512)) % 512
+                    skipBytes(gzip, size + pad)
+                    continue
+                }
+
                 val outFile = File(destDir, name)
 
                 when (typeFlag.toInt().toChar()) {
@@ -236,8 +244,9 @@ object ProotBootstrap {
             }
         }
 
-        // dpkg force-unsafe-io
+        // dpkg force-unsafe-io + remove PaxHeaders
         File(rootfs, "etc/dpkg/dpkg.cfg.d").mkdirs()
+        File(rootfs, "etc/dpkg/dpkg.cfg.d/PaxHeaders").let { if (it.exists()) it.deleteRecursively() }
         File(rootfs, "etc/dpkg/dpkg.cfg.d/00proot").writeText("force-unsafe-io\n")
 
         // Android GIDs
