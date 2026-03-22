@@ -50,6 +50,8 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
     private fun handleClient(socket: Socket) {
         try {
             socket.soTimeout = 120_000
+            socket.tcpNoDelay = true
+            socket.keepAlive = true
             val input = BufferedReader(InputStreamReader(socket.getInputStream()))
             val output = socket.getOutputStream()
 
@@ -150,7 +152,8 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
             "Access-Control-Allow-Origin: *\r\n" +
             "Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n" +
             "Access-Control-Allow-Headers: Content-Type\r\n" +
-            "Connection: close\r\n" +
+            "Keep-Alive: timeout=120\r\n" +
+            "Connection: keep-alive\r\n" +
             "\r\n"
         output.write(resp.toByteArray())
         output.write(bytes)
@@ -185,12 +188,10 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
                         jsonRpcError(id, -32602, "Missing tool name in params. Got: ${params.keys().asSequence().toList()}")
                     } else {
                         val result = toolRegistry.callTool(name, args)
-                        val isError = result.startsWith("Error:")
                         jsonRpcResult(id, JSONObject().apply {
                             put("content", JSONArray().put(JSONObject().apply {
                                 put("type", "text"); put("text", result)
                             }))
-                            if (isError) put("isError", true)
                         })
                     }
                 } catch (e: Exception) {
