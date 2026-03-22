@@ -3,6 +3,7 @@ package com.mcpshell.shell
 import android.content.Context
 import android.util.Log
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * Executes commands inside a proot Ubuntu/Debian environment.
@@ -44,8 +45,8 @@ object ProotExecutor {
             pb.redirectErrorStream(true)
             val process = pb.start()
 
-            val output = ShellExecutor.readStream(process.inputStream, timeoutMs)
-            process.waitFor()
+            val output = ShellExecutor.readAll(process.inputStream, timeoutMs)
+            process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
             val out = output.trim()
             if (out.length > 8000) out.take(8000) + "\n[truncated]"
             else out.ifEmpty { "(no output, exit ${process.exitValue()})" }

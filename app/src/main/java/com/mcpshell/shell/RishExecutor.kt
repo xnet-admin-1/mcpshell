@@ -32,8 +32,8 @@ object RishExecutor {
         )
         method.isAccessible = true
         val process = method.invoke(null, arrayOf("sh", "-c", command), null, null) as ShizukuRemoteProcess
-        val stdout = ShellExecutor.readStream(process.inputStream, timeoutMs)
-        val stderr = ShellExecutor.readStream(process.errorStream, 1_000)
+        val stdout = ShellExecutor.readAll(process.inputStream, timeoutMs)
+        val stderr = ShellExecutor.readAll(process.errorStream, 1_000)
         process.waitFor()
         process.destroy()
         val out = (stdout + stderr).trim()
