@@ -5,20 +5,22 @@ import com.mcpshell.tools.ToolRegistry
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
+import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 private const val TAG = "McpSseServer"
 
 /**
  * MCP server using SSE transport over NanoHTTPD.
  *
- * Protocol flow:
- *   1. Client GET /sse → receives SSE stream with endpoint event
- *   2. Client POST /message?sessionId=xxx → sends JSON-RPC requests
- *   3. Server responds via the SSE stream
+ * Protocol:
+ *   1. Client GET /sse → SSE stream, receives endpoint event
+ *   2. Client POST /message?sessionId=xxx → JSON-RPC request
+ *   3. Server pushes response via SSE stream
  */
 class McpSseServer(
     port: Int,
@@ -31,17 +33,16 @@ class McpSseServer(
 
     private val toolRegistry = ToolRegistry()
 
-    // Active SSE sessions: sessionId → output pipe
-    private val sessions = ConcurrentHashMap<String, PipedOutputStream>()
+    // Each SSE session has a queue of bytes to send
+    private val sessions = ConcurrentHashMap<String, LinkedBlockingQueue<ByteArray>>()
 
     override fun serve(session: IHTTPSession): Response {
         Log.d(TAG, "${session.method} ${session.uri}")
         return when {
             session.method == Method.GET && session.uri == "/sse" -> handleSse(session)
             session.method == Method.POST && session.uri == "/message" -> handleMessage(session)
-            session.method == Method.GET && session.uri == "/health" -> newFixedLengthResponse(
-                Response.Status.OK, "application/json", """{"status":"ok"}"""
-            )
+            session.method == Method.GET && session.uri == "/health" ->
+                newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
             else -> {
                 log("404: ${session.method} ${session.uri}")
                 newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found: ${session.uri}")
@@ -51,19 +52,60 @@ class McpSseServer(
 
     private fun handleSse(session: IHTTPSession): Response {
         val sessionId = UUID.randomUUID().toString()
-        val pipedIn = PipedInputStream(8192)
-        val pipedOut = PipedOutputStream(pipedIn)
-        sessions[sessionId] = pipedOut
+        val queue = LinkedBlockingQueue<ByteArray>()
+        sessions[sessionId] = queue
 
         log("Client connected: $sessionId")
-        Log.i(TAG, "SSE session opened: $sessionId")
 
-        // Send the endpoint event so client knows where to POST
+        // Send endpoint event immediately via the queue
         val port = this.listeningPort
         val endpointUrl = "http://localhost:$port/message?sessionId=$sessionId"
-        sendSseEvent(pipedOut, "endpoint", endpointUrl)
+        queue.put("event: endpoint\ndata: $endpointUrl\n\n".toByteArray())
 
-        val response = newChunkedResponse(Response.Status.OK, "text/event-stream", pipedIn)
+        // Create an InputStream that reads from the queue — blocks until data available
+        val sseStream = object : InputStream() {
+            private var current: ByteArrayInputStream? = null
+
+            override fun read(): Int {
+                while (true) {
+                    val c = current
+                    if (c != null) {
+                        val b = c.read()
+                        if (b != -1) return b
+                        current = null
+                    }
+                    // Block waiting for next chunk (with keepalive)
+                    val data = queue.poll(15, TimeUnit.SECONDS)
+                    if (data == null) {
+                        // Send SSE comment as keepalive
+                        current = ByteArrayInputStream(":keepalive\n\n".toByteArray())
+                    } else {
+                        current = ByteArrayInputStream(data)
+                    }
+                }
+            }
+
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                // First byte blocks, then read what's available
+                val first = read()
+                if (first == -1) return -1
+                b[off] = first.toByte()
+                var count = 1
+                while (count < len) {
+                    val c = current
+                    if (c != null && c.available() > 0) {
+                        val n = c.read(b, off + count, minOf(len - count, c.available()))
+                        if (n > 0) count += n
+                        else break
+                    } else break
+                }
+                return count
+            }
+
+            override fun available(): Int = current?.available() ?: 0
+        }
+
+        val response = newChunkedResponse(Response.Status.OK, "text/event-stream", sseStream)
         response.addHeader("Cache-Control", "no-cache")
         response.addHeader("Connection", "keep-alive")
         response.addHeader("Access-Control-Allow-Origin", "*")
@@ -73,10 +115,9 @@ class McpSseServer(
     private fun handleMessage(session: IHTTPSession): Response {
         val sessionId = session.parms["sessionId"]
             ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing sessionId")
-        val pipe = sessions[sessionId]
+        val queue = sessions[sessionId]
             ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Unknown session")
 
-        // Read POST body
         val bodyMap = HashMap<String, String>()
         session.parseBody(bodyMap)
         val body = bodyMap["postData"] ?: ""
@@ -89,11 +130,11 @@ class McpSseServer(
         val method = request.optString("method")
         log("← $method")
 
-        val response = processRequest(request)
-        if (response != null) {
-            val data = response.toString()
+        val result = processRequest(request)
+        if (result != null) {
+            val data = result.toString()
             Log.d(TAG, "→ $data")
-            sendSseEvent(pipe, "message", data)
+            queue.put("event: message\ndata: $data\n\n".toByteArray())
         }
 
         return newFixedLengthResponse(Response.Status.ACCEPTED, "application/json", """{"ok":true}""")
@@ -143,18 +184,7 @@ class McpSseServer(
         put("jsonrpc", "2.0"); put("id", id); put("result", result)
     }
 
-    private fun sendSseEvent(pipe: PipedOutputStream, event: String, data: String) {
-        try {
-            val msg = "event: $event\ndata: $data\n\n"
-            pipe.write(msg.toByteArray())
-            pipe.flush()
-        } catch (e: Exception) {
-            Log.w(TAG, "SSE write failed: ${e.message}")
-        }
-    }
-
     override fun stop() {
-        sessions.values.forEach { try { it.close() } catch (_: Exception) {} }
         sessions.clear()
         super.stop()
     }
