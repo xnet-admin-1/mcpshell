@@ -17,7 +17,7 @@ class McpForegroundService : Service() {
         val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, "mcp_server")
                 .setContentTitle("MCP Shell")
-                .setContentText("Server running on port 3000")
+                .setContentText("Server running on port 39811")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setOngoing(true)
                 .build()
@@ -25,7 +25,7 @@ class McpForegroundService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
                 .setContentTitle("MCP Shell")
-                .setContentText("Server running on port 3000")
+                .setContentText("Server running on port 39811")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setOngoing(true)
                 .build()

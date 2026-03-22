@@ -35,13 +35,17 @@ class McpSseServer(
     private val sessions = ConcurrentHashMap<String, PipedOutputStream>()
 
     override fun serve(session: IHTTPSession): Response {
+        Log.d(TAG, "${session.method} ${session.uri}")
         return when {
             session.method == Method.GET && session.uri == "/sse" -> handleSse(session)
             session.method == Method.POST && session.uri == "/message" -> handleMessage(session)
             session.method == Method.GET && session.uri == "/health" -> newFixedLengthResponse(
                 Response.Status.OK, "application/json", """{"status":"ok"}"""
             )
-            else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+            else -> {
+                log("404: ${session.method} ${session.uri}")
+                newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found: ${session.uri}")
+            }
         }
     }
 

@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startServer() {
-        val port = 3000
+        val port = 39811
         server = McpSseServer(port) { msg -> runOnUiThread { appendLog(msg) } }
         server!!.start()
         McpSseServer.instance = server

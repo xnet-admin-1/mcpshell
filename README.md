@@ -4,7 +4,7 @@ A standalone Android app that runs an MCP (Model Context Protocol) server, expos
 
 ## What It Does
 
-Runs an SSE-based MCP server on `localhost:3000`. Any MCP client (Claude Desktop, Cursor, VS Code, AIOPE, etc.) can connect and execute commands on the Android device through three shell environments:
+Runs an SSE-based MCP server on `localhost:39811`. Any MCP client (Claude Desktop, Cursor, VS Code, AIOPE, etc.) can connect and execute commands on the Android device through three shell environments:
 
 - **sh** — Standard Android shell (unprivileged)
 - **ubuntu** — Full proot Debian/Ubuntu userland (apt, python, node, git, gcc, etc.)
@@ -34,7 +34,7 @@ Plus filesystem tools: `read_file`, `write_file`, `list_directory`, `search_file
   "mcpServers": {
     "android": {
       "transport": "sse",
-      "url": "http://<phone-ip>:3000/sse"
+      "url": "http://<phone-ip>:39811/sse"
     }
   }
 }
@@ -43,7 +43,7 @@ Plus filesystem tools: `read_file`, `write_file`, `list_directory`, `search_file
 ### Health Check
 
 ```
-GET http://localhost:3000/health
+GET http://localhost:39811/health
 ```
 
 ## Requirements
