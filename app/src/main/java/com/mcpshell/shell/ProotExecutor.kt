@@ -80,10 +80,6 @@ object ProotExecutor {
         val tmpDir = File(rootfs, "tmp").also { it.mkdirs() }
         bind(tmpDir.absolutePath, "/dev/shm")
 
-        if (File("/proc/self/fd/0").exists()) bind("/proc/self/fd/0", "/dev/stdin")
-        if (File("/proc/self/fd/1").exists()) bind("/proc/self/fd/1", "/dev/stdout")
-        if (File("/proc/self/fd/2").exists()) bind("/proc/self/fd/2", "/dev/stderr")
-
         val fipsFile = File(tmpDir, "fips_enabled").also { it.writeText("0\n") }
         bind(fipsFile.absolutePath, "/proc/sys/crypto/fips_enabled")
 
