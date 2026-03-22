@@ -125,7 +125,7 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
                 sendHttp(output, 400, "text/plain", "Invalid JSON"); return
             }
             val method = request.optString("method")
-            log("← $method")
+            log("← $method" + if (method == "tools/call") " | $body" else "")
 
             val result = processRequest(request)
             if (result != null) {
@@ -176,18 +176,27 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
                 put("tools", toolRegistry.listTools())
             })
             "tools/call" -> {
-                val params = request.optJSONObject("params") ?: JSONObject()
-                val name = params.getString("name")
-                val args = params.optJSONObject("arguments") ?: JSONObject()
-                log("⚡ $name")
-                val result = toolRegistry.callTool(name, args)
-                val isError = result.startsWith("Error:")
-                jsonRpcResult(id, JSONObject().apply {
-                    put("content", JSONArray().put(JSONObject().apply {
-                        put("type", "text"); put("text", result)
-                    }))
-                    if (isError) put("isError", true)
-                })
+                try {
+                    val params = request.optJSONObject("params") ?: JSONObject()
+                    val name = params.optString("name", "")
+                    val args = params.optJSONObject("arguments") ?: JSONObject()
+                    log("⚡ $name ${args.toString().take(80)}")
+                    if (name.isEmpty()) {
+                        jsonRpcError(id, -32602, "Missing tool name in params. Got: ${params.keys().asSequence().toList()}")
+                    } else {
+                        val result = toolRegistry.callTool(name, args)
+                        val isError = result.startsWith("Error:")
+                        jsonRpcResult(id, JSONObject().apply {
+                            put("content", JSONArray().put(JSONObject().apply {
+                                put("type", "text"); put("text", result)
+                            }))
+                            if (isError) put("isError", true)
+                        })
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "tools/call failed: ${e.message}\nrequest: $request", e)
+                    jsonRpcError(id, -32603, "Internal error: ${e.message}")
+                }
             }
             "ping" -> jsonRpcResult(id, JSONObject())
             else -> {
@@ -199,5 +208,10 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
 
     private fun jsonRpcResult(id: Any?, result: JSONObject) = JSONObject().apply {
         put("jsonrpc", "2.0"); put("id", id); put("result", result)
+    }
+
+    private fun jsonRpcError(id: Any?, code: Int, message: String) = JSONObject().apply {
+        put("jsonrpc", "2.0"); put("id", id)
+        put("error", JSONObject().apply { put("code", code); put("message", message) })
     }
 }
