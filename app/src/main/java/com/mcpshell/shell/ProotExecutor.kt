@@ -105,7 +105,10 @@ object ProotExecutor {
     private fun buildProotEnv(filesDir: String, nativeLibDir: String): Map<String, String> {
         val env = mutableMapOf(
             "PROOT_TMP_DIR" to "$filesDir/tmp",
-            "LD_LIBRARY_PATH" to filesDir
+            "LD_LIBRARY_PATH" to filesDir,
+            "PROOT_NO_SECCOMP" to "1",
+            "ANDROID_ROOT" to "/system",
+            "ANDROID_DATA" to "/data"
         )
         val loader = File(nativeLibDir, "libproot.so")
         val loader32 = File(nativeLibDir, "libproot32.so")
