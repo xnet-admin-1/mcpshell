@@ -81,12 +81,6 @@ object ProotExecutor {
         val tmpDir = File(rootfs, "tmp").also { it.mkdirs() }
         bind(tmpDir.absolutePath, "/dev/shm")
 
-        // /dev/stdin/stdout/stderr — only bind if FDs actually exist (they don't in non-interactive ProcessBuilder)
-        for ((fd, dev) in listOf("0" to "/dev/stdin", "1" to "/dev/stdout", "2" to "/dev/stderr")) {
-            val src = File("/proc/self/fd/$fd")
-            if (src.exists()) try { src.canonicalPath; bind(src.absolutePath, dev) } catch (_: Exception) {}
-        }
-
         val fipsFile = File(tmpDir, "fips_enabled").also { it.writeText("0\n") }
         bind(fipsFile.absolutePath, "/proc/sys/crypto/fips_enabled")
 
