@@ -135,8 +135,10 @@ object ProotBootstrap {
                                 remaining -= n
                             }
                         }
-                        // Set executable for bin/sbin files
-                        if (name.contains("/bin/") || name.contains("/sbin/")) {
+                        // Set executable for binaries, libraries, and linkers
+                        if (name.contains("/bin/") || name.contains("/sbin/")
+                            || name.endsWith(".so") || name.contains(".so.")
+                            || name.contains("/lib/ld-")) {
                             outFile.setExecutable(true)
                         }
                         // Skip padding to 512-byte boundary
@@ -218,6 +220,19 @@ object ProotBootstrap {
         // DNS
         File(rootfs, "etc").mkdirs()
         File(rootfs, "etc/resolv.conf").writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
+
+        // Fix permissions on ELF interpreter and shared libs (tar extraction may miss +x)
+        listOf("lib/ld-linux-aarch64.so.1", "lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
+               "lib/aarch64-linux-gnu/ld-2.39.so", "lib/ld-linux-armhf.so.3",
+               "usr/bin/env", "bin/sh", "bin/bash", "bin/dash").forEach { rel ->
+            val f = File(rootfs, rel)
+            if (f.exists() && !f.isDirectory) f.setExecutable(true)
+        }
+        // Bulk chmod +x on all .so files in lib dirs
+        listOf("lib", "lib/aarch64-linux-gnu", "usr/lib", "usr/lib/aarch64-linux-gnu").forEach { dir ->
+            File(rootfs, dir).listFiles()?.filter { it.name.endsWith(".so") || it.name.contains(".so.") }
+                ?.forEach { it.setExecutable(true) }
+        }
 
         // Standard dirs
         for (d in listOf("tmp", "var/tmp", "var/cache/apt", "var/lib/apt", "home", "root",
