@@ -47,7 +47,10 @@ object ProotExecutor {
 
             val output = ShellExecutor.readAll(process.inputStream, timeoutMs)
             process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-            val out = output.trim()
+            // Filter proot warnings (harmless but confusing to end users)
+            val out = output.lines()
+                .filter { !it.startsWith("proot warning:") && !it.startsWith("proot info:") }
+                .joinToString("\n").trim()
             if (out.length > 8000) out.take(8000) + "\n[truncated]"
             else out.ifEmpty { "(no output, exit ${process.exitValue()})" }
         } catch (e: Exception) {
@@ -80,6 +83,11 @@ object ProotExecutor {
 
         val tmpDir = File(rootfs, "tmp").also { it.mkdirs() }
         bind(tmpDir.absolutePath, "/dev/shm")
+
+        // /dev/stdin/stdout/stderr — needed by dpkg maintainer scripts
+        bind("/proc/self/fd/0", "/dev/stdin")
+        bind("/proc/self/fd/1", "/dev/stdout")
+        bind("/proc/self/fd/2", "/dev/stderr")
 
         val fipsFile = File(tmpDir, "fips_enabled").also { it.writeText("0\n") }
         bind(fipsFile.absolutePath, "/proc/sys/crypto/fips_enabled")
