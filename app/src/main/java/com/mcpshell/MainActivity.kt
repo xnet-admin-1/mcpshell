@@ -58,6 +58,8 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.testBtn).setOnClickListener { runSelfTest() }
 
+        findViewById<Button>(R.id.shizukuBtn).setOnClickListener { connectShizuku() }
+
         findViewById<android.widget.TextView>(R.id.copyLogsBtn).setOnClickListener {
             val clip = getSystemService(android.content.ClipboardManager::class.java)
             clip.setPrimaryClip(android.content.ClipData.newPlainText("MCP Shell Log", logText.text))
@@ -148,15 +150,34 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun connectShizuku() {
+        try {
+            if (!rikka.shizuku.Shizuku.pingBinder()) {
+                appendLog("Shizuku is not running. Start Shizuku app first.")
+                return
+            }
+            if (rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                appendLog("Shizuku already connected.")
+                updateShellStatus()
+                return
+            }
+            appendLog("Requesting Shizuku permission...")
+            rikka.shizuku.Shizuku.requestPermission(0)
+        } catch (e: Exception) {
+            appendLog("Shizuku error: ${e.message}")
+        }
+    }
+
     private fun updateShellStatus() {
         val shells = mutableListOf("sh ✓")
         if (ProotBootstrap.isInstalled(this)) shells.add("ubuntu ✓")
         else shells.add("ubuntu ✗")
-        if (RishExecutor.isShizukuReady()) shells.add("rish ✓")
-        else shells.add("rish ✗")
+        val shizukuReady = RishExecutor.isShizukuReady()
+        if (shizukuReady) shells.add("rish ✓") else shells.add("rish ✗")
         shellStatus.text = "Shells: ${shells.joinToString("  ")}"
 
         setupBtn.text = if (ProotBootstrap.isInstalled(this)) "Ubuntu ✓" else "Setup Ubuntu"
+        findViewById<Button>(R.id.shizukuBtn).text = if (shizukuReady) "Shizuku ✓" else "Connect Shizuku"
     }
 
     private fun appendLog(msg: String) {
