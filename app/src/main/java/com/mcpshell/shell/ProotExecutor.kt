@@ -7,11 +7,12 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Executes commands inside a proot Ubuntu/Debian environment.
- * Ported from AIOPE's proot logic into pure Kotlin.
+ * Tracks running process for external cancellation.
  */
 object ProotExecutor {
 
     private const val TAG = "ProotExecutor"
+    @Volatile private var currentProcess: Process? = null
 
     fun exec(context: Context, command: String, timeoutMs: Long = 30_000): String {
         val filesDir = context.filesDir.absolutePath
@@ -22,14 +23,12 @@ object ProotExecutor {
             ?: return "Error: proot binary not found in $nativeLibDir"
         if (!rootfs.isDirectory) return "Error: Ubuntu rootfs not installed. Run setup first."
 
-        // Ensure libtalloc.so.2 exists
         val talloc = File(filesDir, "libtalloc.so.2")
         if (!talloc.exists()) {
             val src = File(nativeLibDir, "libtalloc.so")
             if (src.exists()) src.inputStream().use { i -> talloc.outputStream().use { o -> i.copyTo(o) } }
         }
 
-        // Ensure tmp dir
         File(filesDir, "tmp").mkdirs()
 
         val args = buildProotArgs(rootfs, filesDir, command)
@@ -43,18 +42,29 @@ object ProotExecutor {
             pb.environment().putAll(env)
             pb.redirectErrorStream(true)
             val process = pb.start()
+            currentProcess = process
 
             val output = ShellExecutor.readAll(process.inputStream, timeoutMs)
             process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-            // Filter proot warnings (harmless but confusing to end users)
+            currentProcess = null
             val out = output.lines()
                 .filter { !it.startsWith("proot warning:") && !it.startsWith("proot info:") }
                 .joinToString("\n").trim()
             if (out.length > 8000) out.take(8000) + "\n[truncated]"
             else out.ifEmpty { "(no output, exit ${process.exitValue()})" }
         } catch (e: Exception) {
+            currentProcess = null
             Log.e(TAG, "exec failed", e)
             "Error: ${e.message}"
+        }
+    }
+
+    /** Kill any running proot process. */
+    fun cancel() {
+        currentProcess?.let {
+            Log.i(TAG, "Cancelling running proot process")
+            it.destroyForcibly()
+            currentProcess = null
         }
     }
 
@@ -65,7 +75,6 @@ object ProotExecutor {
             args.addAll(listOf("-b", if (dst != null) "$src:$dst" else src))
         }
 
-        // System directories
         for (mnt in listOf("/apex", "/odm", "/product", "/system", "/system_ext", "/vendor",
                            "/linkerconfig/ld.config.txt",
                            "/linkerconfig/com.android.art/ld.config.txt")) {
@@ -83,7 +92,6 @@ object ProotExecutor {
         val tmpDir = File(rootfs, "tmp").also { it.mkdirs() }
         bind(tmpDir.absolutePath, "/dev/shm")
 
-        // /dev/stdin/stdout/stderr — needed by dpkg maintainer scripts
         bind("/proc/self/fd/0", "/dev/stdin")
         bind("/proc/self/fd/1", "/dev/stdout")
         bind("/proc/self/fd/2", "/dev/stderr")

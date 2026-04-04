@@ -60,6 +60,13 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.shizukuBtn).setOnClickListener { connectShizuku() }
 
+        findViewById<Button>(R.id.updateBtn).setOnClickListener { runProotCommand("Update", "apt-get update -qq && apt-get upgrade -y -qq -o Dpkg::Options::=--force-unsafe-io") }
+        findViewById<Button>(R.id.fixDpkgBtn).setOnClickListener { runProotCommand("Fix dpkg", "dpkg --configure -a --force-unsafe-io && apt-get install -f -y -qq") }
+        findViewById<Button>(R.id.cancelBtn).setOnClickListener {
+            ProotExecutor.cancel()
+            appendLog("⚡ Cancelled")
+        }
+
         findViewById<android.widget.TextView>(R.id.copyLogsBtn).setOnClickListener {
             val clip = getSystemService(android.content.ClipboardManager::class.java)
             clip.setPrimaryClip(android.content.ClipData.newPlainText("MCP Shell Log", logText.text))
@@ -147,6 +154,21 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { appendLog("[rish] skipped (Shizuku not available)") }
             }
             runOnUiThread { appendLog("─── Done ───") }
+        }.start()
+    }
+
+    private fun runProotCommand(label: String, command: String) {
+        if (!ProotBootstrap.isInstalled(this)) {
+            appendLog("Ubuntu not installed. Run Setup first.")
+            return
+        }
+        appendLog("─── $label ───")
+        Thread {
+            val result = ProotExecutor.exec(this, command, timeoutMs = 120_000)
+            runOnUiThread {
+                appendLog(result)
+                appendLog("─── $label done ───")
+            }
         }.start()
     }
 
