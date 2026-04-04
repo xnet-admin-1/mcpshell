@@ -1,0 +1,62 @@
+name: "Build APK"
+run-name: "MCPShell — build with latest Box binaries"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths-ignore: ["*.md"]
+
+env:
+  BOX_REPO: "xnet-admin-1/box"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Download Box native binaries
+        run: |
+          JNILIBS="app/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$JNILIBS"
+
+          for bin in libproot-xed.so libproot.so libproot32.so libtalloc.so libbsdtar.so; do
+            echo "Downloading $bin..."
+            curl -fSL -o "$JNILIBS/$bin" \
+              "https://github.com/${{ env.BOX_REPO }}/releases/download/native-latest/$bin"
+          done
+
+          echo "=== arm64-v8a binaries ==="
+          ls -lh "$JNILIBS/"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: chmod +x gradlew && ./gradlew :app:assembleDebug
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "latest"
+          name: "MCPShell (latest)"
+          body: |
+            MCPShell debug APK built with latest Box native binaries.
+
+            Native binaries from [`${{ env.BOX_REPO }}` native-latest](https://github.com/${{ env.BOX_REPO }}/releases/tag/native-latest).
+          files: app/build/outputs/apk/debug/app-debug.apk
+          draft: false
+          prerelease: false

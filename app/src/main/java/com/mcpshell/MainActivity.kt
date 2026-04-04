@@ -62,7 +62,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun startServer() {
         val port = 39811
-        server = McpSseServer(port) { msg -> runOnUiThread { appendLog(msg) } }
+        val bind = "0.0.0.0"
+        server = McpSseServer(port, bind) { msg -> runOnUiThread { appendLog(msg) } }
         server!!.start()
         McpSseServer.instance = server
 
@@ -70,10 +71,10 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
 
-        statusText.text = "● Running on localhost:$port"
+        statusText.text = "● Running on $bind:$port"
         statusText.setTextColor(0xFF4CAF50.toInt())
         toggleBtn.text = "Stop Server"
-        appendLog("MCP Streamable HTTP server started on http://localhost:$port/mcp")
+        appendLog("MCP Streamable HTTP server started on http://$bind:$port/mcp")
     }
 
     private fun stopServer() {

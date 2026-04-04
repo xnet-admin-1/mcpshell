@@ -5,6 +5,7 @@ import com.mcpshell.tools.ToolRegistry
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.*
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 
@@ -15,7 +16,7 @@ private const val TAG = "McpSseServer"
  * Single endpoint: POST /mcp → JSON-RPC request/response.
  * No SSE, no long-lived connections.
  */
-class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}) {
+class McpSseServer(private val port: Int, private val bindAddress: String = "0.0.0.0", private val log: (String) -> Unit = {}) {
 
     companion object {
         var instance: McpSseServer? = null
@@ -29,8 +30,10 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
         isAlive = true
         Thread {
             try {
-                serverSocket = ServerSocket(port)
-                Log.i(TAG, "Listening on port $port")
+                serverSocket = ServerSocket()
+                serverSocket!!.reuseAddress = true
+                serverSocket!!.bind(InetSocketAddress(bindAddress, port))
+                Log.i(TAG, "Listening on $bindAddress:$port")
                 while (isAlive) {
                     val socket = serverSocket?.accept() ?: break
                     Thread { handleClient(socket) }.start()
@@ -75,7 +78,8 @@ class McpSseServer(private val port: Int, private val log: (String) -> Unit = {}
                     handleMcp(input, headers, output)
                 }
                 method == "GET" && (path == "/health" || path == "/") -> {
-                    sendHttp(output, 200, "application/json", """{"status":"ok","transport":"streamable-http"}""")
+                    val toolCount = toolRegistry.listTools().length()
+                    sendHttp(output, 200, "application/json", """{"status":"ok","transport":"streamable-http","tools":$toolCount}""")
                 }
                 // Support GET on /mcp for SSE-style clients (return 405 with Allow header)
                 method == "GET" && path == "/mcp" -> {

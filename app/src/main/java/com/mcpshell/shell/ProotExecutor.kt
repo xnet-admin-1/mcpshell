@@ -18,9 +18,8 @@ object ProotExecutor {
         val rootfs = File(filesDir, "env/ubuntu")
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
 
-        // libproot-xed.so is the actual proot binary; libproot.so is the loader
-        val prootBin = File(nativeLibDir, "libproot-xed.so")
-        if (!prootBin.exists()) return "Error: proot binary not found at ${prootBin.path}"
+        val prootBin = ProotBootstrap.findProotXed(context)
+            ?: return "Error: proot binary not found in $nativeLibDir"
         if (!rootfs.isDirectory) return "Error: Ubuntu rootfs not installed. Run setup first."
 
         // Ensure libtalloc.so.2 exists
@@ -100,6 +99,8 @@ object ProotExecutor {
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "HOME=/root", "USER=root", "TERM=xterm-256color",
             "TMPDIR=/tmp", "LANG=C.UTF-8", "LC_ALL=C.UTF-8",
+            "OPENSSL_CONF=/dev/null",
+            "NODE_OPTIONS=--use-openssl-ca",
             "/bin/bash", "-c", command
         ))
         return args
