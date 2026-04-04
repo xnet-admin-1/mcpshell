@@ -69,12 +69,12 @@ class MainActivity : AppCompatActivity() {
             setProotButtonsEnabled(true)
         }
 
-        findViewById<android.widget.TextView>(R.id.copyLogsBtn).setOnClickListener {
+        findViewById<Button>(R.id.copyLogsBtn).setOnClickListener {
             val clip = getSystemService(android.content.ClipboardManager::class.java)
             clip.setPrimaryClip(android.content.ClipData.newPlainText("MCP Shell Log", logText.text))
             android.widget.Toast.makeText(this, "Copied", android.widget.Toast.LENGTH_SHORT).show()
         }
-        findViewById<android.widget.TextView>(R.id.clearLogsBtn).setOnClickListener {
+        findViewById<Button>(R.id.clearLogsBtn).setOnClickListener {
             logText.text = ""
         }
 

@@ -33,11 +33,12 @@
         android:textColor="#888888"
         android:layout_marginBottom="12dp" />
 
+    <!-- Row 1: Server / Setup / Test -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="12dp">
+        android:layout_marginBottom="4dp">
 
         <Button
             android:id="@+id/toggleBtn"
@@ -45,14 +46,15 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Start Server"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="4dp" />
 
         <Button
             android:id="@+id/setupBtn"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Setup Ubuntu" />
+            android:text="Setup Ubuntu"
+            android:layout_marginHorizontal="4dp" />
 
         <Button
             android:id="@+id/testBtn"
@@ -60,28 +62,15 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Self Test"
-            android:layout_marginStart="8dp" />
+            android:layout_marginStart="4dp" />
     </LinearLayout>
 
+    <!-- Row 2: Update / Fix dpkg / Cancel -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="12dp">
-
-        <Button
-            android:id="@+id/shizukuBtn"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Connect Shizuku" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="12dp">
+        android:layout_marginBottom="4dp">
 
         <Button
             android:id="@+id/updateBtn"
@@ -108,37 +97,36 @@
             android:layout_marginStart="4dp" />
     </LinearLayout>
 
+    <!-- Row 3: Shizuku / Copy / Clear -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="4dp">
+        android:layout_marginBottom="12dp">
 
-        <TextView
+        <Button
+            android:id="@+id/shizukuBtn"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Log"
-            android:textSize="14sp"
-            android:textColor="#888888" />
+            android:text="Connect Shizuku"
+            android:layout_marginEnd="4dp" />
 
-        <TextView
+        <Button
             android:id="@+id/copyLogsBtn"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="COPY"
-            android:textSize="12sp"
-            android:textColor="#4CAF50"
-            android:paddingHorizontal="8dp" />
+            android:layout_weight="1"
+            android:text="Copy"
+            android:layout_marginHorizontal="4dp" />
 
-        <TextView
+        <Button
             android:id="@+id/clearLogsBtn"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="CLEAR"
-            android:textSize="12sp"
-            android:textColor="#FF5722"
-            android:paddingHorizontal="8dp" />
+            android:layout_weight="1"
+            android:text="Clear"
+            android:layout_marginStart="4dp" />
     </LinearLayout>
 
     <ScrollView
