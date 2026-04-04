@@ -87,7 +87,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startServer() {
         val port = 39811
-        val bind = "0.0.0.0"
+        val bind = "127.0.0.1"
         server = McpSseServer(port, bind) { msg -> runOnUiThread { appendLog(msg) } }
         server!!.start()
         McpSseServer.instance = server
