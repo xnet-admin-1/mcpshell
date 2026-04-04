@@ -107,9 +107,6 @@ object ProotExecutor {
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "HOME=/root", "USER=root", "TERM=xterm-256color",
             "TMPDIR=/tmp", "LANG=C.UTF-8", "LC_ALL=C.UTF-8",
-            "OPENSSL_CONF=/dev/null",
-            "NODE_OPTIONS=--use-openssl-ca",
-            "DEBIAN_FRONTEND=noninteractive",
             "/bin/bash", "-c", command
         ))
         return args
@@ -118,10 +115,7 @@ object ProotExecutor {
     private fun buildProotEnv(filesDir: String, nativeLibDir: String): Map<String, String> {
         val env = mutableMapOf(
             "PROOT_TMP_DIR" to "$filesDir/tmp",
-            "LD_LIBRARY_PATH" to filesDir,
-            "PROOT_NO_SECCOMP" to "1",
-            "ANDROID_ROOT" to "/system",
-            "ANDROID_DATA" to "/data"
+            "LD_LIBRARY_PATH" to filesDir
         )
         val loader = File(nativeLibDir, "libproot.so")
         val loader32 = File(nativeLibDir, "libproot32.so")
