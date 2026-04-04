@@ -48,7 +48,6 @@ class MainActivity : AppCompatActivity() {
 
         requestPermissions()
         rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
-        requestShizukuPermission()
         updateShellStatus()
 
         toggleBtn.setOnClickListener {
@@ -74,15 +73,6 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
-    }
-
-    private fun requestShizukuPermission() {
-        try {
-            if (rikka.shizuku.Shizuku.pingBinder() &&
-                rikka.shizuku.Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                rikka.shizuku.Shizuku.requestPermission(0)
-            }
-        } catch (_: Exception) {}
     }
 
     private fun startServer() {
