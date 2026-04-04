@@ -26,6 +26,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scrollView: ScrollView
     private var server: McpSseServer? = null
 
+    private val shizukuPermissionListener =
+        rikka.shizuku.Shizuku.OnRequestPermissionResultListener { _, grantResult ->
+            val granted = grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED
+            runOnUiThread {
+                appendLog(if (granted) "Shizuku permission granted" else "Shizuku permission denied")
+                updateShellStatus()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -38,6 +47,8 @@ class MainActivity : AppCompatActivity() {
         scrollView  = findViewById(R.id.logScroll)
 
         requestPermissions()
+        rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+        requestShizukuPermission()
         updateShellStatus()
 
         toggleBtn.setOnClickListener {
@@ -58,6 +69,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         appendLog("MCP Shell ready. Tap Start to begin.")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+    }
+
+    private fun requestShizukuPermission() {
+        try {
+            if (rikka.shizuku.Shizuku.pingBinder() &&
+                rikka.shizuku.Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                rikka.shizuku.Shizuku.requestPermission(0)
+            }
+        } catch (_: Exception) {}
     }
 
     private fun startServer() {
