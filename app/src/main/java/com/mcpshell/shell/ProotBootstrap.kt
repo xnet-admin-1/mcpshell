@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 object ProotBootstrap {
 
     private const val TAG = "ProotBootstrap"
-    private const val BOX_ROOTFS_VERSION = "rootfs_box_v1"
+    private const val BOX_ROOTFS_VERSION = "rootfs_box_v2"
 
     fun envDir(ctx: Context) = File(ctx.filesDir, "env")
     fun rootfsDir(ctx: Context) = File(envDir(ctx), "ubuntu")
