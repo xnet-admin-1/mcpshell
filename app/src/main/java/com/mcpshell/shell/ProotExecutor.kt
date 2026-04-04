@@ -101,6 +101,7 @@ object ProotExecutor {
             "TMPDIR=/tmp", "LANG=C.UTF-8", "LC_ALL=C.UTF-8",
             "OPENSSL_CONF=/dev/null",
             "NODE_OPTIONS=--use-openssl-ca",
+            "DEBIAN_FRONTEND=noninteractive",
             "/bin/bash", "-c", command
         ))
         return args

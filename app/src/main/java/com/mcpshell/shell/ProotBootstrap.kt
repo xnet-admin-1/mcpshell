@@ -254,19 +254,19 @@ object ProotBootstrap {
         val setupMarker = File(envDir(ctx), ".distro_setup_done")
         if (setupMarker.exists()) return
 
-        log("Running distro setup (locale)...")
+        log("Running distro setup...")
         try {
-            val result = ProotExecutor.exec(ctx,
+            // Fix any interrupted dpkg state first
+            ProotExecutor.exec(ctx, "dpkg --configure -a --force-unsafe-io 2>/dev/null || true", timeoutMs = 60_000)
+            // Then locale
+            ProotExecutor.exec(ctx,
                 "DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales 2>/dev/null || true",
                 timeoutMs = 60_000)
-            if (result.isNotBlank() && !result.startsWith("Error:")) {
-                Log.d(TAG, "distro_setup locale: $result")
-            }
             setupMarker.writeText("done")
             log("Distro setup complete")
         } catch (e: Exception) {
             Log.w(TAG, "distro_setup failed (non-fatal): ${e.message}")
-            log("Locale setup skipped (${e.message})")
+            log("Distro setup skipped (${e.message})")
         }
     }
 
@@ -350,6 +350,13 @@ object ProotBootstrap {
         listOf("bin", "sbin", "usr/bin", "usr/sbin", "usr/local/bin", "usr/local/sbin",
                "usr/lib/apt/methods", "usr/lib/dpkg").forEach { dir ->
             File(rootfs, dir).walkTopDown().filter { it.isFile }.forEach { it.setExecutable(true) }
+        }
+        // dpkg info scripts need +x
+        File(rootfs, "var/lib/dpkg/info").let { dir ->
+            if (dir.isDirectory) dir.walkTopDown()
+                .filter { it.isFile && (it.name.endsWith(".postinst") || it.name.endsWith(".preinst")
+                    || it.name.endsWith(".postrm") || it.name.endsWith(".prerm")) }
+                .forEach { it.setExecutable(true) }
         }
         // ELF interpreters
         listOf("lib/ld-linux-aarch64.so.1", "lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
