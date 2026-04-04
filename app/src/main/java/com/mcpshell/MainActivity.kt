@@ -14,6 +14,7 @@ import androidx.core.app.ActivityCompat
 import com.mcpshell.server.McpSseServer
 import com.mcpshell.service.McpForegroundService
 import com.mcpshell.shell.ProotBootstrap
+import com.mcpshell.shell.ProotExecutor
 import com.mcpshell.shell.RishExecutor
 
 class MainActivity : AppCompatActivity() {
