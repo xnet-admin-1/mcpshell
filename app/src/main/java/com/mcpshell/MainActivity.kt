@@ -66,6 +66,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.cancelBtn).setOnClickListener {
             ProotExecutor.cancel()
             appendLog("⚡ Cancelled")
+            setProotButtonsEnabled(true)
         }
 
         findViewById<android.widget.TextView>(R.id.copyLogsBtn).setOnClickListener {
@@ -163,14 +164,22 @@ class MainActivity : AppCompatActivity() {
             appendLog("Ubuntu not installed. Run Setup first.")
             return
         }
+        setProotButtonsEnabled(false)
         appendLog("─── $label ───")
         Thread {
             val result = ProotExecutor.exec(this, command, timeoutMs = 120_000)
             runOnUiThread {
                 appendLog(result)
                 appendLog("─── $label done ───")
+                setProotButtonsEnabled(true)
             }
         }.start()
+    }
+
+    private fun setProotButtonsEnabled(enabled: Boolean) {
+        findViewById<Button>(R.id.updateBtn).isEnabled = enabled
+        findViewById<Button>(R.id.fixDpkgBtn).isEnabled = enabled
+        setupBtn.isEnabled = enabled
     }
 
     private fun connectShizuku() {

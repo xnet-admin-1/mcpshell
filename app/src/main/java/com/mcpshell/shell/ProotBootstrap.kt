@@ -295,6 +295,7 @@ object ProotBootstrap {
         }
         val total = conn.contentLength.toLong()
         var downloaded = 0L
+        var lastReportedMB = -1L
         BufferedInputStream(conn.inputStream).use { input ->
             FileOutputStream(dest).use { output ->
                 val buf = ByteArray(65536)
@@ -302,8 +303,10 @@ object ProotBootstrap {
                 while (input.read(buf).also { n = it } != -1) {
                     output.write(buf, 0, n)
                     downloaded += n
-                    if (total > 0 && downloaded % (1024 * 1024) < 65536) {
-                        log("  ${downloaded / (1024 * 1024)}MB / ${total / (1024 * 1024)}MB")
+                    val mb = downloaded / (1024 * 1024)
+                    if (total > 0 && mb > lastReportedMB) {
+                        lastReportedMB = mb
+                        log("  ${mb}MB / ${total / (1024 * 1024)}MB")
                     }
                 }
             }
