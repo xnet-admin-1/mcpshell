@@ -178,7 +178,9 @@ class MainActivity : AppCompatActivity() {
         setProotButtonsEnabled(false)
         appendLog("─── $label ───")
         Thread {
-            val result = ProotExecutor.exec(this, command, timeoutMs = 120_000)
+            val result = ProotExecutor.exec(this, command, timeoutMs = 120_000) { msg ->
+                runOnUiThread { appendLog(msg) }
+            }
             runOnUiThread {
                 appendLog(result)
                 appendLog("─── $label done ───")
