@@ -2,6 +2,7 @@ package com.mcpshell
 
 import android.app.Application
 import android.util.Log
+import rikka.shizuku.Shizuku
 
 class McpShellApp : Application() {
     companion object {
@@ -14,10 +15,18 @@ class McpShellApp : Application() {
 
         // Sticky listener fires immediately if Shizuku is already bound,
         // or later when it becomes available
-        rikka.shizuku.Shizuku.addBinderReceivedListenerSticky {
+        Shizuku.addBinderReceivedListenerSticky {
             Log.i("McpShell", "Shizuku binder received")
-            if (rikka.shizuku.Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                try { rikka.shizuku.Shizuku.requestPermission(0) } catch (_: Exception) {}
+            try {
+                if (Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    Log.i("McpShell", "Requesting Shizuku permission...")
+                    Shizuku.requestPermission(0)
+                } else {
+                    Log.i("McpShell", "Shizuku permission already granted")
+                }
+                Log.i("McpShell", "Shizuku pingBinder: ${Shizuku.pingBinder()}")
+            } catch (e: Exception) {
+                Log.e("McpShell", "Shizuku permission check failed: ${e.message}")
             }
         }
     }

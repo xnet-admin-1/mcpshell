@@ -6,11 +6,13 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.text.method.ScrollingMovementMethod
 import android.widget.Button
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+
 import com.mcpshell.server.McpSseServer
 import com.mcpshell.service.McpForegroundService
 import com.mcpshell.shell.ProotBootstrap
@@ -24,7 +26,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logText: TextView
     private lateinit var toggleBtn: Button
     private lateinit var setupBtn: Button
+    private lateinit var shizukuBtn: Button
     private lateinit var scrollView: ScrollView
+    // ScrollView removed - using scrollable TextView instead
     private var server: McpSseServer? = null
 
     private val shizukuPermissionListener =
@@ -45,7 +49,14 @@ class MainActivity : AppCompatActivity() {
         logText     = findViewById(R.id.logText)
         toggleBtn   = findViewById(R.id.toggleBtn)
         setupBtn    = findViewById(R.id.setupBtn)
+        shizukuBtn  = findViewById(R.id.shizukuBtn)
         scrollView  = findViewById(R.id.logScroll)
+
+        // Enable text selection and scrolling for the log text view
+        logText.setTextIsSelectable(true)
+        logText.setMovementMethod(ScrollingMovementMethod.getInstance())
+        logText.setHorizontallyScrolling(true)
+        logText.setMaxLines(1000)
 
         requestPermissions()
         rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
@@ -209,12 +220,21 @@ class MainActivity : AppCompatActivity() {
         shellStatus.text = "Shells: ${shells.joinToString("  ")}"
 
         setupBtn.text = if (ProotBootstrap.isInstalled(this)) "Ubuntu ✓" else "Setup Ubuntu"
-        findViewById<Button>(R.id.shizukuBtn).text = if (shizukuReady) "Shizuku ✓" else "Connect Shizuku"
+        shizukuBtn.text = if (shizukuReady) "Shizuku ✓" else "Setup Shizuku"
+        shizukuBtn.requestLayout()
     }
 
     private fun appendLog(msg: String) {
+        // Use append for simplicity to avoid recursion issues
         logText.append("$msg\n")
-        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        
+        // Check if there's an active selection
+        val hasSelection = logText.selectionStart != logText.selectionEnd
+        
+        // Auto-scroll to bottom only if there's no selection
+        if (!hasSelection) {
+            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        }
     }
 
     private fun requestPermissions() {

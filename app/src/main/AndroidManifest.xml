@@ -32,6 +32,7 @@
     <application
         android:name=".McpShellApp"
         android:label="MCP Shell"
+        android:icon="@drawable/ic_launcher_original"
         android:extractNativeLibs="true"
         android:theme="@style/Theme.McpShell"
         android:exported="true">

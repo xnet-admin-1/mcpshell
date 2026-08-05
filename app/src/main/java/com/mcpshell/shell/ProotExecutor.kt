@@ -14,26 +14,14 @@ object ProotExecutor {
     private const val TAG = "ProotExecutor"
     @Volatile private var currentProcess: Process? = null
 
-    fun execWithEnv(context: Context?, command: String, timeoutMs: Long = 30_000, extraEnv: Map<String, String> = emptyMap()): Map<String, Any> {
-        val result = mutableMapOf<String, Any>()
-        result["success"] = false
-        result["output"] = ""
-        
-        val contextForPath = context ?: return mapOf("success" to false, "output" to "Error: Android context required")
-        val filesDir = contextForPath.filesDir.absolutePath
+    fun exec(context: Context, command: String, timeoutMs: Long = 30_000): String {
+        val filesDir = context.filesDir.absolutePath
         val rootfs = File(filesDir, "env/ubuntu")
-        val nativeLibDir = contextForPath.applicationInfo.nativeLibraryDir
+        val nativeLibDir = context.applicationInfo.nativeLibraryDir
 
         val prootBin = ProotBootstrap.findProotXed(context)
-        if (prootBin == null) {
-            result["output"] = "Error: proot binary not found in $nativeLibDir"
-            return result
-        }
-        
-        if (!rootfs.isDirectory) {
-            result["output"] = "Error: Ubuntu rootfs not installed. Run setup first."
-            return result
-        }
+            ?: return "Error: proot binary not found in $nativeLibDir"
+        if (!rootfs.isDirectory) return "Error: Ubuntu rootfs not installed. Run setup first."
 
         val talloc = File(filesDir, "libtalloc.so.2")
         if (!talloc.exists()) {
@@ -45,9 +33,6 @@ object ProotExecutor {
 
         val args = buildProotArgs(rootfs, filesDir, command)
         val env = buildProotEnv(filesDir, nativeLibDir)
-        
-        // Add extra environment variables
-        env.putAll(extraEnv)
 
         Log.d(TAG, "exec: ${prootBin.name} ${args.take(5).joinToString(" ")}...")
 
@@ -59,9 +44,6 @@ object ProotExecutor {
             val process = pb.start()
             currentProcess = process
 
-            currentProcess = process
-            
-            // Read output in real-time
             val output = StringBuilder()
             val readerThread = Thread {
                 try {
@@ -74,7 +56,8 @@ object ProotExecutor {
                                 .filter { !it.startsWith("proot warning:") && !it.startsWith("proot info:") }
                                 .joinToString("\n")
                             if (filtered.isNotEmpty()) {
-                                output.append(filtered).append("\n")
+                                output.append(filtered)
+                                output.append('\n')
                             }
                             if (output.length > 8000) break
                         }
@@ -82,34 +65,25 @@ object ProotExecutor {
                 } catch (_: Exception) {}
             }
             readerThread.start()
-            
-            // Wait for process completion
+
             val completed = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
             currentProcess = null
-            
-            // Wait a bit for any final output
+
             readerThread.join(100)
-            
-            // Kill thread if still alive
             if (readerThread.isAlive) {
                 readerThread.interrupt()
             }
-            
+
             val out = output.toString().trim()
             val exitCode = process.exitValue()
             val success = completed && exitCode == 0
-            
-            result["success"] = success
-            result["output"] = if (out.length > 8000) out.take(8000) + "\n[truncated]" else out.ifEmpty { "(no output, exit $exitCode)" }
-            result["exitCode"] = exitCode
-            result["completed"] = completed
-            
-            result
+
+            if (out.length > 8000) out.take(8000) + "\n[truncated]"
+            else out.ifEmpty { "(no output, exit $exitCode)" }
         } catch (e: Exception) {
             currentProcess = null
             Log.e(TAG, "exec failed", e)
-            result["output"] = "Error: ${e.message}"
-            result
+            "Error: ${e.message}"
         }
     }
 
@@ -120,10 +94,6 @@ object ProotExecutor {
             it.destroyForcibly()
             currentProcess = null
         }
-    }
-
-    fun exec(context: Context, command: String, timeoutMs: Long = 30_000): String {
-        return execWithEnv(context, command, timeoutMs).getOrDefault("output", "").toString()
     }
 
     private fun buildProotArgs(rootfs: File, filesDir: String, command: String): List<String> {
