@@ -305,11 +305,11 @@ object ProotBootstrap {
         log("Running distro setup...")
         try {
             // Fix any interrupted dpkg state first
-            ProotExecutor.exec(ctx, "dpkg --configure -a --force-unsafe-io 2>/dev/null || true", timeoutMs = 60_000)
+            ProotExecutor.exec(ctx, "dpkg --configure -a --force-unsafe-io --force-all 2>&1 | grep -v 'W: Tried to start delayed item' || true", timeoutMs = 120_000)
             // Then locale
             ProotExecutor.exec(ctx,
-                "DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales 2>/dev/null || true",
-                timeoutMs = 60_000)
+                "DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales 2>&1 | grep -v 'W: Tried to start delayed item' || true",
+                timeoutMs = 120_000)
             setupMarker.writeText("done")
             log("Distro setup complete")
         } catch (e: Exception) {
