@@ -14,7 +14,7 @@ object ProotExecutor {
     private const val TAG = "ProotExecutor"
     @Volatile private var currentProcess: Process? = null
 
-    fun exec(context: Context, command: String, timeoutMs: Long = 30_000): String {
+    fun exec(context: Context, command: String, timeoutMs: Long = 30_000, logOutput: ((String) -> Unit)? = null): String {
         val filesDir = context.filesDir.absolutePath
         val rootfs = File(filesDir, "env/ubuntu")
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
@@ -58,6 +58,8 @@ object ProotExecutor {
                             if (filtered.isNotEmpty()) {
                                 output.append(filtered)
                                 output.append('\n')
+                                // Log output in real-time if callback provided
+                                logOutput?.invoke(filtered)
                             }
                             if (output.length > 8000) break
                         }

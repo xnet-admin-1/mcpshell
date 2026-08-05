@@ -104,7 +104,7 @@ object ProotBootstrap {
                     else -> "aarch64"
                 }
                 val url = "https://github.com/xnet-admin-1/box/releases/download/rootfs-ubuntu-24.04.4/box-ubuntu-24.04-$pdArch.tar.xz"
-                val tarball = File(envDir, "rootfs.tar.xz")
+                val tarball = File(envDir(ctx), "rootfs.tar.xz")
 
                 log("Downloading Ubuntu 24.04 rootfs ($pdArch)...")
                 download(url, tarball, log)
@@ -305,11 +305,19 @@ object ProotBootstrap {
         log("Running distro setup...")
         try {
             // Fix any interrupted dpkg state first
-            ProotExecutor.exec(ctx, "dpkg --configure -a --force-unsafe-io --force-all 2>&1 | grep -v 'W: Tried to start delayed item' || true", timeoutMs = 120_000)
+            log("  Fixing dpkg state...")
+            ProotExecutor.exec(ctx,
+                "dpkg --configure -a --force-unsafe-io --force-all 2>&1 | grep -v 'W: Tried to start delayed item' || true",
+                timeoutMs = 120_000,
+                logOutput = { log(it) })
+            
             // Then locale
+            log("  Configuring locales...")
             ProotExecutor.exec(ctx,
                 "DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales 2>&1 | grep -v 'W: Tried to start delayed item' || true",
-                timeoutMs = 120_000)
+                timeoutMs = 120_000,
+                logOutput = { log(it) })
+            
             setupMarker.writeText("done")
             log("Distro setup complete")
         } catch (e: Exception) {
