@@ -14,14 +14,26 @@ object ProotExecutor {
     private const val TAG = "ProotExecutor"
     @Volatile private var currentProcess: Process? = null
 
-    fun exec(context: Context, command: String, timeoutMs: Long = 30_000): String {
-        val filesDir = context.filesDir.absolutePath
+    fun execWithEnv(context: Context?, command: String, timeoutMs: Long = 30_000, extraEnv: Map<String, String> = emptyMap()): Map<String, Any> {
+        val result = mutableMapOf<String, Any>()
+        result["success"] = false
+        result["output"] = ""
+        
+        val contextForPath = context ?: return mapOf("success" to false, "output" to "Error: Android context required")
+        val filesDir = contextForPath.filesDir.absolutePath
         val rootfs = File(filesDir, "env/ubuntu")
-        val nativeLibDir = context.applicationInfo.nativeLibraryDir
+        val nativeLibDir = contextForPath.applicationInfo.nativeLibraryDir
 
         val prootBin = ProotBootstrap.findProotXed(context)
-            ?: return "Error: proot binary not found in $nativeLibDir"
-        if (!rootfs.isDirectory) return "Error: Ubuntu rootfs not installed. Run setup first."
+        if (prootBin == null) {
+            result["output"] = "Error: proot binary not found in $nativeLibDir"
+            return result
+        }
+        
+        if (!rootfs.isDirectory) {
+            result["output"] = "Error: Ubuntu rootfs not installed. Run setup first."
+            return result
+        }
 
         val talloc = File(filesDir, "libtalloc.so.2")
         if (!talloc.exists()) {
@@ -33,6 +45,9 @@ object ProotExecutor {
 
         val args = buildProotArgs(rootfs, filesDir, command)
         val env = buildProotEnv(filesDir, nativeLibDir)
+        
+        // Add extra environment variables
+        env.putAll(extraEnv)
 
         Log.d(TAG, "exec: ${prootBin.name} ${args.take(5).joinToString(" ")}...")
 
@@ -44,18 +59,57 @@ object ProotExecutor {
             val process = pb.start()
             currentProcess = process
 
-            val output = ShellExecutor.readAll(process.inputStream, timeoutMs)
-            process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
+            currentProcess = process
+            
+            // Read output in real-time
+            val output = StringBuilder()
+            val readerThread = Thread {
+                try {
+                    process.inputStream.bufferedReader().use { reader ->
+                        val buf = CharArray(4096)
+                        var n: Int
+                        while (reader.read(buf).also { n = it } != -1) {
+                            val chunk = buf.concatToString(0, n)
+                            val filtered = chunk.lines()
+                                .filter { !it.startsWith("proot warning:") && !it.startsWith("proot info:") }
+                                .joinToString("\n")
+                            if (filtered.isNotEmpty()) {
+                                output.append(filtered).append("\n")
+                            }
+                            if (output.length > 8000) break
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+            readerThread.start()
+            
+            // Wait for process completion
+            val completed = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
             currentProcess = null
-            val out = output.lines()
-                .filter { !it.startsWith("proot warning:") && !it.startsWith("proot info:") }
-                .joinToString("\n").trim()
-            if (out.length > 8000) out.take(8000) + "\n[truncated]"
-            else out.ifEmpty { "(no output, exit ${process.exitValue()})" }
+            
+            // Wait a bit for any final output
+            readerThread.join(100)
+            
+            // Kill thread if still alive
+            if (readerThread.isAlive) {
+                readerThread.interrupt()
+            }
+            
+            val out = output.toString().trim()
+            val exitCode = process.exitValue()
+            val success = completed && exitCode == 0
+            
+            result["success"] = success
+            result["output"] = if (out.length > 8000) out.take(8000) + "\n[truncated]" else out.ifEmpty { "(no output, exit $exitCode)" }
+            result["exitCode"] = exitCode
+            result["completed"] = completed
+            
+            result
         } catch (e: Exception) {
             currentProcess = null
             Log.e(TAG, "exec failed", e)
-            "Error: ${e.message}"
+            result["output"] = "Error: ${e.message}"
+            result
         }
     }
 
@@ -66,6 +120,10 @@ object ProotExecutor {
             it.destroyForcibly()
             currentProcess = null
         }
+    }
+
+    fun exec(context: Context, command: String, timeoutMs: Long = 30_000): String {
+        return execWithEnv(context, command, timeoutMs).getOrDefault("output", "").toString()
     }
 
     private fun buildProotArgs(rootfs: File, filesDir: String, command: String): List<String> {

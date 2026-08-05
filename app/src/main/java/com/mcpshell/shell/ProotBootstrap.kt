@@ -110,12 +110,60 @@ object ProotBootstrap {
                 download(url, tarball, log)
 
                 log("Extracting rootfs...")
-                val ok = runBsdtar(bsdtar, tarball, rootfs, stripComponents = 1, log = log)
+                // Setup environment for bsdtar
+                val env = mapOf(
+                    "LD_LIBRARY_PATH" to (bsdtar.parentFile?.absolutePath ?: "")
+                )
+            
+                // Extract using bsdtar with live output
+                val cmd = "${bsdtar.absolutePath} -xf '${tarball.absolutePath}' -C '${rootfs.absolutePath}' --no-same-owner --strip-components=1"
+                log("Extracting rootfs with bsdtar...")
+            
+                val processBuilder = ProcessBuilder(listOf("sh", "-c", cmd))
+                processBuilder.environment().clear()
+                processBuilder.environment().putAll(env)
+                processBuilder.redirectErrorStream(true)
+            
+                val process = processBuilder.start()
+            
+                // Read output in real-time
+                val readerThread = Thread {
+                    try {
+                        process.inputStream.bufferedReader().use { reader ->
+                            val buf = CharArray(4096)
+                            var n: Int
+                            val output = StringBuilder()
+                            while (reader.read(buf).also { n = it } != -1) {
+                                val chunk = buf.concatToString(0, n)
+                                output.append(chunk)
+                                // Log in chunks to provide live feedback
+                                val lines = chunk.split('\n')
+                                val prefix = if (output.length > 8000) "[output truncated] " else ""
+                                lines.filter { it.trim().isNotEmpty() }.forEach { line ->
+                                    if (output.length <= 8000) {
+                                        log("$prefix$line")
+                                    }
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+                readerThread.start()
+            
+                // Wait for completion
+                val completed = process.waitFor(300, TimeUnit.SECONDS)
+                readerThread.join(100)
+                if (readerThread.isAlive) {
+                    readerThread.interrupt()
+                }
+            
                 tarball.delete()
-                if (!ok || !File(rootfs, "bin/sh").isFile) {
-                    log("ERROR: Extraction failed - bin/sh not found in rootfs")
+            
+                if (!completed || process.exitValue() != 0 || !File(rootfs, "bin/sh").isFile) {
+                    log("ERROR: Extraction failed - exit ${process.exitValue()}")
                     return false
                 }
+                log("Rootfs extracted (Box release)")
                 boxMarker.writeText("box-ubuntu-24.04")
                 log("Rootfs extracted (Box release)")
             } else {
