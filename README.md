@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
   <img src="https://img.shields.io/badge/MCP-Streamable%20HTTP-blue" />
-  <img src="https://img.shields.io/badge/Transport-0.0.0.0-orange" />
+  <img src="https://img.shields.io/badge/Transport-127.0.0.1-orange" />
   <img src="https://img.shields.io/badge/License-AGPL--3.0-purple" />
 </p>
 
@@ -19,14 +19,14 @@ Connect your AI chat app → it gets a real Linux terminal, package manager, and
 ┌─────────────────────┐         POST /mcp          ┌──────────────────────┐
 │   MCP Client App    │ ◄─────────────────────────► │     MCPShell         │
 │   (Kelivo, Claude,  │    JSON-RPC over HTTP       │                      │
-│    AIOPE, etc.)     │    0.0.0.0:39811            │  ┌─ sh (Android)     │
-└─────────────────────┘                             │  ├─ Ubuntu (proot)   │
+│    AIOPE, etc.)     │    127.0.0.1:39811          │  ┌─ sh (Android)     │
+└─────────────────────┘ (localhost connection)      │  ├─ Ubuntu (proot)   │
                                                     │  ├─ rish (Shizuku)   │
                                                     │  └─ File tools       │
                                                     └──────────────────────┘
 ```
 
-MCPShell runs a **Streamable HTTP** MCP server on `0.0.0.0:39811`. AI clients send JSON-RPC requests, MCPShell executes them and returns results. Simple request/response — no SSE, no WebSocket, no sessions.
+MCPShell runs a **Streamable HTTP** MCP server on `127.0.0.1:39811`. AI clients send JSON-RPC requests via localhost, MCPShell executes them and returns results. Simple request/response — no SSE, no WebSocket, no sessions.
 
 ---
 
